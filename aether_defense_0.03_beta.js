@@ -1,6 +1,6 @@
 'use strict';
 /* ==========================================================================
-AETHER DEFENSE: GACHA TD — 0.03 BETA  (game script)
+AETHER DEFENSE: GACHA TD — 0.04 BETA  (game script)
 Companion file: aether_defense_0.03_beta.html  (keep both in the same folder)
 HOW TO EXTEND THE GAME
 New unit      -> add an entry to UNIT_ROSTER (section 1). Add an EVOLUTIONS entry to make it evolvable.
@@ -14,7 +14,7 @@ New passive   -> add the logic to applyDamageToEnemy / fireTowerAttack.
 /* ==========================================================================
 GAME DATABASE
 ========================================================================== */
-const VERSION = '0.03 Beta';
+const VERSION = '0.04 Beta';
 const RARITIES = {
 common:    { name: 'Common',    rate: 55.00, color: '#94a3b8', mult: 1.0,  cap: 6 },
 rare:      { name: 'Rare',      rate: 27.00, color: '#38bdf8', mult: 1.35, cap: 5 },
@@ -55,7 +55,11 @@ const ABILITIES = [
   passiveName: 'Singularity', passiveDesc: 'Creates a black hole that pulls enemies in, crushes them, and slows survivors 50%.' },
 { id: 'a_chrono',  name: 'Chrono Shatter',  rarity: 'secret',    icon: '⏳', color: '#2dd4bf',
   baseCd: 75, baseDmgPct: 1.25, baseBossPct: 0.70, aoe: 1.0, stunDur: 4.5, bossStun: 3.0, slowPct: 0.6, slowDur: 6.0,
-  passiveName: 'Temporal Fracture', passiveDesc: 'Shatters time itself: huge damage, long stun, and a lingering 60% slow.' }
+  passiveName: 'Temporal Fracture', passiveDesc: 'Shatters time itself: huge damage, long stun, and a lingering 60% slow.' },
+{ id: 'a_tempest', name: 'Tempest Break', rarity: 'epic', icon: '🌩️', color: '#60a5fa', baseCd: 48, baseDmgPct: 0.24, baseBossPct: 0.10, aoe: 1.0,
+  passiveName: 'Skyfall', passiveDesc: 'A map-wide storm strike damages every enemy; bosses resist the impact.' },
+{ id: 'a_rift', name: 'Rift Snare', rarity: 'legendary', icon: '🌀', color: '#c084fc', baseCd: 58, baseDmgPct: 0.32, baseBossPct: 0.14, aoe: 1.0, stunDur: 1.8, bossStun: 0.8,
+  passiveName: 'Dimensional Lock', passiveDesc: 'Deals map-wide damage and briefly locks enemies in place.' }
 ];
 ABILITIES.forEach(a => { if (!a.color) a.color = RARITIES[a.rarity].color; });
 const ABILITY_MAP = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
@@ -125,7 +129,13 @@ passiveName: 'Singularity Collapse', passiveDesc: '35% chance for 3.5x Cosmic Cr
 passiveName: 'Reality Rewrite', passiveDesc: 'Generates +$220 Cash/wave, boosts nearby allies +25% DMG & 18% faster attacks, melts armor.', passiveType: 'genesis_aura', farmBase: 220 },
 { id: 's_dawn', name: 'ZENITH: Eternal Dawn', rarity: 'secret', icon: '🌅', cost: 680, dmg: 450, rng: 255, spa: 0.6, attackType: 'chain_splash', chainCount: 5, splashRadius: 85, projColor: '#fde68a', exclusive: 'eclipse',
 critChance: 0.30, critMult: 3.0, farmBase: 180,
-passiveName: 'Dawn Without End', passiveDesc: 'Chains 5 solar blasts, 30% crit for 3x, +$180 Cash/wave and allies deal +20% DMG.', passiveType: 'dawn_aura' }
+passiveName: 'Dawn Without End', passiveDesc: 'Chains 5 solar blasts, 30% crit for 3x, +$180 Cash/wave and allies deal +20% DMG.', passiveType: 'dawn_aura' },
+{ id: 'e_riftwarden', name: 'Rift Warden', rarity: 'epic', icon: '🛡️', cost: 205, dmg: 58, rng: 160, spa: 1.0, attackType: 'slow', slowPct: 0.28, slowDur: 2.5, projColor: '#67e8f9', exclusive: 'rift',
+passiveName: 'Dimensional Guard', passiveDesc: 'Marks targets; deals bonus damage to slowed enemies.', passiveType: 'rift_guard' },
+{ id: 'l_riftblade', name: 'Riftblade Saint', rarity: 'legendary', icon: '🗡️', cost: 310, dmg: 145, rng: 190, spa: 0.78, attackType: 'chain', chainCount: 4, projColor: '#a78bfa', exclusive: 'rift',
+critChance: 0.22, critMult: 2.8, passiveName: 'Phase Cut', passiveDesc: 'Rapid dimensional strikes chain across 4 enemies.', passiveType: 'rift_blade' },
+{ id: 'm_starweaver', name: 'Astral Starweaver', rarity: 'mythic', icon: '🌠', cost: 455, dmg: 260, rng: 225, spa: 0.82, attackType: 'chain_splash', chainCount: 5, splashRadius: 72, projColor: '#e879f9', exclusive: 'rift',
+passiveName: 'Constellation Burst', passiveDesc: 'Chains astral blasts and boosts nearby allies by 15% damage.', passiveType: 'starweaver_aura' }
 ];
 UNIT_ROSTER.forEach(u => { u.color = RARITIES[u.rarity].color; });
 const UNIT_MAP = Object.fromEntries(UNIT_ROSTER.map(u => [u.id, u]));
@@ -136,7 +146,8 @@ seraph_aura:  { dmg: 0.20 },
 genesis_aura: { dmg: 0.25, spa: 0.82 },
 rally_aura:   { dmg: 0.12 },
 eclipse_aura: { dmg: 0.18 },
-dawn_aura:    { dmg: 0.20 }
+dawn_aura:    { dmg: 0.20 },
+ starweaver_aura: { dmg: 0.15 }
 };
 const EVO_TIERS = {
 legendary: { reqLevel: 15, gold: 3000,  mats: { essence: 40,  alloy: 15, ember: 10 } },
@@ -204,7 +215,12 @@ name: 'Arcane Arsenal Summon', cost1: 120, cost10: 1080,
 rates: { common: 50.00, rare: 28.00, epic: 14.00, legendary: 5.50, mythic: 2.00, secret: 0.50 },
 hardLeg: 40, hardMyth: 100, softStart: 30, featured: ['a_meteor', 'a_nova', 'a_void'], featuredRate: 0.5,
 pool: 'abilities',
-desc: 'Summon powerful Battle Abilities. Only ONE ability can be equipped per battle. Duplicates raise Star Rank, improving cooldown & power.' }
+desc: 'Summon powerful Battle Abilities. Only ONE ability can be equipped per battle. Duplicates raise Star Rank, improving cooldown & power.' },
+rift: { id: 'rift', icon: '🌀', short: 'Rift Vanguard', tag: 'LIMITED RIFT BANNER', theme: 'rift',
+name: 'Rift Vanguard Summon', cost1: 150, cost10: 1350,
+rates: { common: 50.00, rare: 27.00, epic: 13.00, legendary: 6.00, mythic: 3.20, secret: 0.80 },
+hardLeg: 40, hardMyth: 100, softStart: 30, featured: ['e_riftwarden', 'l_riftblade', 'm_starweaver'], featuredRate: 0.65,
+pool: 'units', desc: 'A limited hero banner featuring three Rift-exclusive defenders, boosted featured odds, and faster pity.' }
 };
 
 /* ---------- STAGES — each stage now has 6 Acts ---------- */
@@ -351,6 +367,17 @@ return st && st.act >= minAct;
 }).length;
 }
 
+/* Trait system: permanent unit modifiers, inspired by anime tower-defense trait rolls. */
+const TRAITS = {
+  nimble: { name: 'Nimble', icon: '💨', color: '#38bdf8', desc: '12% faster attacks', spa: 0.88 },
+  range: { name: 'Eagle', icon: '🦅', color: '#34d399', desc: '+15% range', rng: 1.15 },
+  power: { name: 'Overlord', icon: '👑', color: '#fbbf24', desc: '+25% damage', dmg: 1.25 },
+  godspeed: { name: 'Godspeed', icon: '⚡', color: '#c084fc', desc: '20% faster attacks', spa: 0.80 },
+  fortune: { name: 'Fortune', icon: '🍀', color: '#4ade80', desc: '+10% damage and +8% range', dmg: 1.10, rng: 1.08 }
+};
+const TRAIT_KEYS = Object.keys(TRAITS);
+function rollTrait() { return TRAIT_KEYS[Math.floor(Math.random() * TRAIT_KEYS.length)]; }
+function traitFor(unitId) { return TRAITS[saveData.owned[unitId]?.trait] || null; }
 /* ==========================================================================
 2. SAVE STATE
 ========================================================================== */
@@ -359,10 +386,10 @@ const OLD_SAVE_KEYS = ['aether_defense_gacha_save_v3', 'aether_defense_gacha_sav
 const $ = id => document.getElementById(id);
 const defaultSave = () => ({
 gems: 1500, gold: 500, totalPulls: 0, lastDailyClaim: 0,
-pity: { standard: { leg: 0, myth: 0 }, eclipse: { leg: 0, myth: 0 }, arcane: { leg: 0, myth: 0 } },
+pity: { standard: { leg: 0, myth: 0 }, eclipse: { leg: 0, myth: 0 }, arcane: { leg: 0, myth: 0 }, rift: { leg: 0, myth: 0 } },
 selectedStage: 'valley_act1', selectedTrial: 't_echo', selectedTier: 1,
 materials: { essence: 0, alloy: 0, ember: 0, void: 0 },
-tickets: { standard: 0, eclipse: 0, arcane: 0 },
+tickets: { standard: 0, eclipse: 0, arcane: 0, rift: 0 },
 trialProgress: {},
 owned: {
 c_scout: { level: 1, stars: 0, copies: 1 },
@@ -391,7 +418,8 @@ tickets: { ...base.tickets, ...(p.tickets || {}) },
 pity: {
 standard: { ...base.pity.standard, ...(pp.standard || {}) },
 eclipse: { ...base.pity.eclipse, ...(pp.eclipse || {}) },
-arcane: { ...base.pity.arcane, ...(pp.arcane || {}) }
+arcane: { ...base.pity.arcane, ...(pp.arcane || {}) },
+rift: { ...base.pity.rift, ...(pp.rift || {}) }
 },
 trialProgress: { ...(p.trialProgress || {}) },
 bestWave: { ...(p.bestWave || {}) }, cleared: { ...(p.cleared || {}) },
@@ -404,6 +432,7 @@ if (p.pityLeg !== undefined && !p.pity) m.pity.standard = { leg: p.pityLeg || 0,
 for (const id of Object.keys(m.owned)) {
 if (!UNIT_MAP[id]) { delete m.owned[id]; continue; }
 const o = m.owned[id] = { level: 1, stars: 0, copies: 1, ...m.owned[id] };
+if (!TRAITS[o.trait]) o.trait = rollTrait();
 if (o.evolved && !EVOLUTIONS[id]) delete o.evolved;
 }
 for (const id of Object.keys(m.abilities)) {
@@ -421,9 +450,9 @@ function loadGame() {
 try {
 let raw = localStorage.getItem(SAVE_KEY);
 for (const k of OLD_SAVE_KEYS) if (!raw) raw = localStorage.getItem(k);
-if (!raw) return defaultSave();
+if (!raw) return sanitizeSave(defaultSave());
 return sanitizeSave(JSON.parse(raw));
-} catch (e) { return defaultSave(); }
+} catch (e) { return sanitizeSave(defaultSave()); }
 }
 let saveData = loadGame();
 function saveGame() {
@@ -443,10 +472,11 @@ function getEffectiveUnitStats(unitId, defOverride) {
 const def = defOverride || getUnitDef(unitId);
 const inv = saveData.owned[unitId] || { level: 1, stars: 0 };
 const totalMult = (1 + (inv.level - 1) * 0.12) * (1 + inv.stars * 0.10);
+const trait = TRAITS[inv.trait] || {};
 return {
-dmg: Math.round(def.dmg * totalMult),
-rng: Math.round(def.rng * (1 + inv.stars * 0.03 + (inv.level - 1) * 0.01)),
-spa: Number(Math.max(0.22, def.spa * Math.pow(0.985, inv.level - 1)).toFixed(2)),
+dmg: Math.round(def.dmg * totalMult * (trait.dmg || 1)),
+rng: Math.round(def.rng * (1 + inv.stars * 0.03 + (inv.level - 1) * 0.01) * (trait.rng || 1)),
+spa: Number(Math.max(0.22, def.spa * Math.pow(0.985, inv.level - 1) * (trait.spa || 1)).toFixed(2)),
 farmBase: def.farmBase ? Math.round(def.farmBase * totalMult) : 0,
 level: inv.level, stars: inv.stars
 };
@@ -639,13 +669,14 @@ $('activeArenaPanel').style.display = 'none'; $('stageSelectPanel').style.displa
 }
 $('btnNotes').addEventListener('click', showPatchNotes);
 function showPatchNotes() {
-openModal('📜 Patch Notes — 0.03 Beta', `<div class="notes">
+openModal('📜 Patch Notes — 0.04 Beta', `<div class="notes">
 <h4>⚡ Ability System Rebalance</h4>
 <ul>
 <li><b>Only ONE ability can be equipped per battle</b> — choose wisely from your collection.</li>
-<li>New <b>Arcane Arsenal</b> banner summons 6 unique abilities (one per rarity tier).</li>
+<li>New <b>Rift Vanguard</b> limited banner, Rift-exclusive heroes, trait rolls, and expanded abilities.</li>
+<li>Traits permanently modify unit damage, range, or attack speed; reroll for 75 Gems.</li>
 <li>Abilities level up and gain stars, improving cooldown and power.</li>
-<li>New abilities: Meteor Strike (Epic), Solar Nova (Legendary), Void Collapse (Mythic), Chrono Shatter (Secret).</li>
+<li>New abilities: Tempest Break (Epic), Rift Snare (Legendary), plus the existing Meteor, Nova, Void, and Chrono skills.</li>
 </ul>
 <h4>🗺️ 6-Act Stages</h4>
 <ul>
@@ -670,7 +701,7 @@ $('btnResetSave').addEventListener('click', () => {
 openModal('♻️ Reset Progress?', `<p class="text-sm muted" style="margin:12px 0;">Wipe all units, gems, upgrades, materials and records and restart with 1,500 starter Gems?</p><div style="display:flex;gap:10px;justify-content:flex-end;"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" id="confirmWipeBtn">Yes, Reset Save</button></div>`);
 $('confirmWipeBtn').onclick = () => {
 localStorage.removeItem(SAVE_KEY); OLD_SAVE_KEYS.forEach(k => localStorage.removeItem(k));
-saveData = defaultSave();
+saveData = sanitizeSave(defaultSave());
 if (game.active) endMatchSilently();
 saveGame(); closeModal(); refreshAll();
 showToast('♻️ Save data reset to starter state.');
@@ -755,7 +786,7 @@ const item = pickUnit(b, chosen);
 const isAbility = b.pool === 'abilities';
 const inv = isAbility ? saveData.abilities : saveData.owned;
 let isNew = false, starUp = false;
-if (!inv[item.id]) { inv[item.id] = { level: 1, stars: 0, copies: 1 }; isNew = true; }
+if (!inv[item.id]) { inv[item.id] = { level: 1, stars: 0, copies: 1, ...(isAbility ? {} : { trait: rollTrait() }) }; isNew = true; }
 else {
 const o = inv[item.id];
 o.copies++;
@@ -890,6 +921,7 @@ renderSquadAndInventory();
 });
 });
 $('sortSelect').addEventListener('change', renderSquadAndInventory);
+$('unitSearch')?.addEventListener('input', renderSquadAndInventory);
 $('btnAutoEquipBest').addEventListener('click', () => {
 const ids = Object.keys(saveData.owned).sort((a, b) => {
 const ua = getUnitDef(a), ub = getUnitDef(b);
@@ -913,6 +945,18 @@ function equipAbility(abilityId) {
 saveData.equippedAbility = abilityId;
 saveGame(); renderSquadAndInventory();
 showToast(`${ABILITY_MAP[abilityId].icon} <b>${ABILITY_MAP[abilityId].name}</b> equipped!`, '#c084fc');
+}
+function rerollUnitTrait(unitId) {
+const inv = saveData.owned[unitId];
+if (!inv) return;
+const cost = 75;
+if (saveData.gems < cost) { showToast(`Need ${cost} Gems to reroll a trait.`, '#f87171'); return; }
+saveData.gems -= cost;
+const old = inv.trait;
+let next = rollTrait();
+if (TRAIT_KEYS.length > 1) while (next === old) next = rollTrait();
+inv.trait = next; saveGame(); renderSquadAndInventory();
+showToast(`✨ Trait rerolled: <b>${TRAITS[next].name}</b> — ${TRAITS[next].desc}`, TRAITS[next].color);
 }
 function upgradeUnitLobby(unitId) {
 const inv = saveData.owned[unitId];
@@ -956,7 +1000,8 @@ dmg: (a, b) => getEffectiveUnitStats(b.id).dmg - getEffectiveUnitStats(a.id).dmg
 level: (a, b) => saveData.owned[b.id].level - saveData.owned[a.id].level,
 cost: (a, b) => a.cost - b.cost
 };
-const list = Object.keys(saveData.owned).map(getUnitDef).filter(u => u && (currentFilter === 'all' || u.rarity === currentFilter)).sort(sorters[sortBy]);
+const searchTerm = ($('unitSearch')?.value || '').trim().toLowerCase();
+const list = Object.keys(saveData.owned).map(getUnitDef).filter(u => u && (currentFilter === 'all' || u.rarity === currentFilter) && (!searchTerm || u.name.toLowerCase().includes(searchTerm) || u.id.toLowerCase().includes(searchTerm))).sort(sorters[sortBy]);
 $('ownedUnitsGrid').innerHTML = list.map(u => {
 const id = u.baseId || u.id;
 const stats = getEffectiveUnitStats(id), isEq = saveData.squad.includes(id), maxed = stats.level >= MAX_LEVEL;
@@ -971,9 +1016,11 @@ return `<div class="unit-card rarity-${u.rarity} ${u.evolved ? 'is-evolved' : ''
 <div class="stat-pill"><div class="stat-label">SPA</div><div class="stat-val">${stats.spa}s</div></div>
 </div>
 <div class="passive-box"><b style="color:#38bdf8;">${u.passiveName}:</b> <span class="muted">${u.passiveDesc}</span></div>
+<div class="trait-chip" style="border-color:${TRAITS[saveData.owned[id].trait]?.color || '#64748b'};color:${TRAITS[saveData.owned[id].trait]?.color || '#94a3b8'};">${TRAITS[saveData.owned[id].trait]?.icon || '✨'} <b>${TRAITS[saveData.owned[id].trait]?.name || 'No Trait'}</b> <span class="muted">${TRAITS[saveData.owned[id].trait]?.desc || ''}</span></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto;">
 <button class="btn ${isEq ? 'btn-danger' : 'btn-primary'}" style="padding:8px;" onclick="toggleEquipUnit('${id}')">${isEq ? '✕ Unequip' : '＋ Equip'}</button>
 <button class="btn btn-gold" style="padding:8px;" ${maxed ? 'disabled' : ''} onclick="upgradeUnitLobby('${id}')">${maxed ? '★ MAX' : `⬆ Lv.+1 (${upgradeCost(stats.level)}🪙)`}</button>
+<button class="btn btn-purple" style="padding:8px;grid-column:1/-1;" onclick="rerollUnitTrait('${id}')">🎲 Reroll Trait (75💎)</button>
 </div>
 </div>`;
 }).join('') || '<div class="text-sm muted">No units of this rarity yet.</div>';
@@ -1614,6 +1661,22 @@ if (e.hp <= 0) killEnemy(e, null);
 flashScreen('#2dd4bf88');
 break;
 }
+case 'a_tempest':
+case 'a_rift': {
+sfx('meteor');
+addFx({ type: 'ring', x: w / 2, y: h / 2, maxR: Math.hypot(w, h) / 1.35, color: ab.color, life: 0.75, lw: 6 });
+for (const e of [...game.enemies]) {
+if (e.dead) continue;
+const pct = (e.isBoss ? ab.baseBossPct : ab.baseDmgPct) * pw;
+e.hp -= e.maxHp * pct;
+if (ab.stunDur) e.stunTimer = Math.max(e.stunTimer, e.isBoss ? ab.bossStun : ab.stunDur);
+addFloatingText(e.x, e.y - 16, ab.id === 'a_rift' ? 'RIFT!' : 'TEMPEST', ab.color, 13);
+burst(e.x, e.y, ab.color, 7, 110, 0.5);
+if (e.hp <= 0) killEnemy(e, null);
+}
+flashScreen(ab.color + '77');
+break;
+}
 }
 game.enemies = game.enemies.filter(e => !e.dead);
 }
@@ -1881,6 +1944,7 @@ if (enemy.dead) return;
 let dmg = rawDmg;
 const def = src.def, p = def.passiveType;
 if (p === 'fast_slayer' && enemy.kind === 'fast') dmg *= 1.15;
+if (p === 'rift_guard' && enemy.slowTimer > 0) dmg *= 1.35;
 if (enemy.armor > 0) {
 if (p === 'armor_pierce') dmg *= 1.25;
 else if (p === 'acid' || p === 'genesis_aura') { /* ignores armor */ }
